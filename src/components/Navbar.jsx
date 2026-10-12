@@ -1,27 +1,62 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogOut, User } from 'lucide-react';
 import { FaGlobeAmericas } from 'react-icons/fa';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { onAuthStateChange, logout } from '../services/auth';
+import AuthModal from './AuthModal';
+import LoginPromptModal from './LoginPromptModal';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoginPromptOpen, setIsLoginPromptOpen] = useState(false);
+  const [selectedTabName, setSelectedTabName] = useState('');
   const location = useLocation();
 
+  // Monitor auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((currentUser) => {
+      setUser(currentUser);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+      alert('Logged out successfully');
+    } catch (error) {
+      alert('Error logging out: ' + error.message);
+    }
+  };
+
+  const handleProtectedTabClick = (e, tabName, path) => {
+    if (!user) {
+      e.preventDefault();
+      setSelectedTabName(tabName);
+      setIsLoginPromptOpen(true);
+    }
+  };
+
   const navLinks = [
-    { path: '/', label: 'Home' },
-    { path: '/destination', label: 'Destinations' },
-    { path: '/weather', label: 'Weather' },
-    { path: '/budget', label: 'Budget Planner' },
+    { path: '/', label: 'Home', protected: false },
+    { path: '/destination', label: 'Destinations', protected: true },
+    { path: '/weather', label: 'Weather', protected: true },
+    { path: '/budget', label: 'Budget Planner', protected: true },
   ];
 
   const isActive = (path) => location.pathname === path;
 
   return (
-    <nav className="bg-white sticky top-0 z-50" style={{ 
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      backdropFilter: 'blur(10px)',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)'
-    }}>
+    <>
+      <nav className="bg-white sticky top-0 z-50" style={{ 
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        backdropFilter: 'blur(10px)',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)'
+      }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           {/* Logo */}
@@ -43,9 +78,11 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
+                onClick={(e) => link.protected && handleProtectedTabClick(e, link.label, link.path)}
                 className="relative text-sm font-medium transition-colors group"
                 style={{
-                  color: isActive(link.path) ? '#065f46' : '#64748b'
+                  color: isActive(link.path) ? '#065f46' : '#64748b',
+                  cursor: link.protected && !user ? 'pointer' : 'default'
                 }}
               >
                 <span className="group-hover:text-emerald-700">{link.label}</span>
@@ -75,21 +112,50 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Link
-              to="/destination"
-              className="px-5 py-2.5 rounded-full text-sm font-medium flex items-center space-x-2 shadow-md transition-all transform hover:-translate-y-0.5"
-              style={{ 
-                backgroundColor: '#1b4332',
-                color: 'white'
-              }}
-            >
-              <span>Start planning</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </Link>
+          {/* Desktop Auth Buttons */}
+          <div className="hidden md:flex items-center gap-3">
+            {user ? (
+              <>
+                <div className="flex items-center gap-3 px-4 py-2 bg-emerald-50 rounded-full">
+                  <User className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-emerald-900">
+                    {user.displayName || user.email.split('@')[0]}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-full flex items-center gap-2 transition"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 text-emerald-600 hover:text-emerald-700 font-medium"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="px-5 py-2.5 rounded-full text-sm font-medium flex items-center space-x-2 shadow-md transition-all transform hover:-translate-y-0.5"
+                  style={{ 
+                    backgroundColor: '#1b4332',
+                    color: 'white'
+                  }}
+                >
+                  <span>Sign Up</span>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -114,7 +180,10 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                onClick={() => setIsMenuOpen(false)}
+                onClick={(e) => {
+                  link.protected && handleProtectedTabClick(e, link.label, link.path);
+                  setIsMenuOpen(false);
+                }}
                 className="block px-4 py-3 text-sm font-medium rounded-lg transition-colors"
                 style={{
                   backgroundColor: isActive(link.path) ? '#d1fae5' : 'transparent',
@@ -124,25 +193,80 @@ const Navbar = () => {
                 {link.label}
               </Link>
             ))}
-            <div className="pt-4 px-4">
-              <Link
-                to="/destination"
-                className="w-full px-5 py-2.5 rounded-full text-sm font-medium flex items-center justify-center space-x-2 shadow-md"
-                style={{ 
-                  backgroundColor: '#1b4332',
-                  color: 'white'
-                }}
-              >
-                <span>Start planning</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </Link>
+            <div className="pt-4 px-4 space-y-3">
+              {user ? (
+                <>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-lg">
+                    <User className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm font-medium text-emerald-900">
+                      {user.displayName || user.email.split('@')[0]}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-lg flex items-center justify-center gap-2 transition"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setIsSignUp(false);
+                      setIsAuthModalOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 border border-emerald-600 text-emerald-600 font-medium rounded-lg hover:bg-emerald-50 transition"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsSignUp(true);
+                      setIsAuthModalOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 rounded-lg text-sm font-medium"
+                    style={{ 
+                      backgroundColor: '#1b4332',
+                      color: 'white'
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
     </nav>
+
+    {/* Auth Modal */}
+    <AuthModal 
+      isOpen={isAuthModalOpen}
+      onClose={() => setIsAuthModalOpen(false)}
+      isSignUp={isSignUp}
+      setIsSignUp={setIsSignUp}
+    />
+
+    {/* Login Prompt Modal */}
+    <LoginPromptModal 
+      isOpen={isLoginPromptOpen}
+      onClose={() => setIsLoginPromptOpen(false)}
+      onSignUp={() => {
+        setIsLoginPromptOpen(false);
+        setIsSignUp(true);
+        setIsAuthModalOpen(true);
+      }}
+      tabName={selectedTabName}
+    />
+    </>
   );
 };
 

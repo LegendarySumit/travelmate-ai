@@ -1,7 +1,13 @@
+// By Sumit Kumar Prusty
+
 import React, { useState, useEffect, useRef } from 'react';
 import koreaImage from '../assets/images/korea.png';
 import taiwanImage from '../assets/images/taiwan.png';
 import malyImage from '../assets/images/maly.png';
+import { onAuthStateChange } from '../services/auth';
+import { saveDestination, getUserDestinations, deleteDestination } from '../services/firestore';
+import { fetchDestinationFromAI } from '../services/api';
+import { validateCountryInput } from '../utils/validation';
 
 // Hardcoded fallback images that actually work
 const hardcodedImages = [
@@ -38,17 +44,29 @@ export default function DestinationExplorer() {
   const [savedCountries, setSavedCountries] = useState([]);
   const [isSaved, setIsSaved] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [user, setUser] = useState(null);
   const mapRef = useRef(null);
   const flagRef = useRef(null);
 
+  // Monitor auth state and load saved destinations from Firestore
   useEffect(() => {
-    const saved = localStorage.getItem('savedDestinations');
-    if (saved) {
-      setSavedCountries(JSON.parse(saved));
-    }
+    const unsubscribe = onAuthStateChange(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const destinations = await getUserDestinations(currentUser.uid);
+          setSavedCountries(destinations);
+        } catch (error) {
+          console.error('Error loading destinations:', error);
+        }
+      } else {
+        setSavedCountries([]);
+      }
+    });
+    return unsubscribe;
   }, []);
 
-  // Placeholder state for when no country is selected
+  // Placeholder state for when no country is selected - generic, no hardcoded country data
   const placeholderData = {
     name: "Select a Country",
     region: "—",
@@ -77,12 +95,7 @@ export default function DestinationExplorer() {
       "Explore different regions to find your next adventure",
     ],
     recommendedCountries: [
-      { name: "Japan", region: "Asia", image: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80" },
-      { name: "France", region: "Europe", image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80" },
-      { name: "Italy", region: "Europe", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&auto=format&fit=crop&q=80" },
-      { name: "Canada", region: "North America", image: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&auto=format&fit=crop&q=80" },
-      { name: "Australia", region: "Oceania", image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=600&auto=format&fit=crop&q=80" },
-      { name: "Thailand", region: "Asia", image: "https://images.unsplash.com/photo-1503220317375-aaad61436b1b?w=600&auto=format&fit=crop&q=80" },
+      { name: "Search destinations", region: "to see recommendations", image: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80" },
     ],
     coordinates: { lat: 0, lng: 0 }
   };
@@ -131,156 +144,75 @@ export default function DestinationExplorer() {
     setLoading(true);
     setError(null);
     
-    // Get country code first (needed for flag)
-    const countryCode = await getCountryCode(countryName);
-    console.log(`Searching for: ${countryName}, Country Code: ${countryCode}`);
-    
-    // Array of models to try in order
-    const models = [
-      'qwen/qwen3.8-27b',
-      'openai/gpt-oss-120b',
-      'openai/gpt-oss-20b'
-    ];
-    
-    let lastError = null;
-    
-    // Try each model in sequence
-    for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
-      const currentModel = models[modelIndex];
-      console.log(`Attempting to fetch with model: ${currentModel}`);
-      
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: currentModel,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a travel AI expert. Provide comprehensive, accurate travel and geographic data for countries in valid JSON format only. Always return valid JSON with no markdown formatting.'
-              },
-              {
-                role: 'user',
-                content: `Provide travel information for ${countryName}. Return ONLY valid JSON with these fields:
-- description: 2-3 sentences about the country
-- aiSummary: 2-3 sentences covering main attractions and travel appeal
-- culture: 2-3 sentences about local customs and traditions
-- food: 2-3 sentences about local cuisine and dining
-- bestTimeToVisit: Write in paragraph format describing specific months/seasons relevant to this country (not generic "October to March"). Example: "The best time to visit [country] is during [specific season name and months] when [weather condition] and [activity/event]. Avoid [problematic season] due to [reason]."
-- aiTips: Array of 4 tips (not 2-3), each 1-2 sentences with practical advice
-- attractions: 3 attractions with title and subtitle
-- recommendedCountries: 6 similar countries in the region
-Return ONLY valid JSON (no markdown, no code blocks): {"name": "", "region": "", "capital": "", "population": "", "currency": "", "language": "", "area": "", "timezone": "", "callingCode": "", "description": "", "aiSummary": "", "culture": "", "food": "", "bestTimeToVisit": "", "attractions": [{"title": "", "subtitle": ""}, ...], "aiTips": ["tip 1", "tip 2", "tip 3", "tip 4"], "recommendedCountries": [{"name": "", "region": ""}], "coordinates": {"lat": 0, "lng": 0}}`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 1800,
-          })
-        });
-
-        // Check for rate limit errors (429)
-        if (response.status === 429) {
-          console.warn(`⚠️ Model ${currentModel} rate limited (429), switching to next model...`);
-          lastError = new Error(`Model ${currentModel} rate limited`);
-          continue; // Try next model
-        }
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.warn(`❌ Model ${currentModel} error: ${errorData.error?.message}`);
-          lastError = new Error(errorData.error?.message || `Model ${currentModel} error`);
-          continue; // Try next model
-        }
-
-        const result = await response.json();
-        
-        if (!result.choices || !result.choices[0]) {
-          console.warn(`Model ${currentModel} returned invalid response structure`);
-          lastError = new Error('Invalid API response structure');
-          continue; // Try next model
-        }
-
-        try {
-          let jsonStr = result.choices[0].message.content;
-          
-          // Remove markdown code blocks if present
-          jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-          
-          // Find and extract JSON object
-          const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-          if (!jsonMatch) {
-            console.warn(`Model ${currentModel} did not return valid JSON`);
-            lastError = new Error('No valid JSON in response');
-            continue; // Try next model
-          }
-          
-          const parsed = JSON.parse(jsonMatch[0]);
-
-          // Generate flag URL using flagsapi.com (same as Japan)
-          const flagUrl = countryCode ? `https://flagsapi.com/${countryCode}/flat/64.png` : `https://flagsapi.com/UN/flat/64.png`;
-
-          // Validate and enrich data with HARDCODED images
-          const enrichedData = {
-            name: parsed.name || countryName,
-            region: parsed.region || 'Asia',
-            capital: parsed.capital || 'Unknown',
-            population: parsed.population || 'Unknown',
-            currency: parsed.currency || 'Unknown',
-            language: parsed.language || 'Unknown',
-            area: parsed.area || 'Unknown',
-            timezone: parsed.timezone || 'Unknown',
-            callingCode: parsed.callingCode || 'Unknown',
-            description: parsed.description || 'No description available',
-            aiSummary: parsed.aiSummary || 'No summary available',
-            culture: parsed.culture || 'No culture information available',
-            food: parsed.food || 'No food information available',
-            bestTimeToVisit: parsed.bestTimeToVisit || 'Year-round destination',
-            heroImage: getRandomImage(hardcodedHeroImages),
-            flagEmoji: flagUrl,
-            countryCode: countryCode,
-            usedModel: currentModel,
-            attractions: (parsed.attractions || []).map((attr) => ({
-              title: attr.title || 'Attraction',
-              subtitle: attr.subtitle || 'Popular Site',
-              image: getRandomImage(hardcodedImages)
-            })).slice(0, 3),
-            aiTips: (parsed.aiTips || []).slice(0, 8),
-            recommendedCountries: (parsed.recommendedCountries || []).map((rc) => ({
-              name: rc.name || 'Country',
-              region: rc.region || 'Region',
-              image: getRandomImage(hardcodedImages)
-            })).slice(0, 8),
-            coordinates: parsed.coordinates || { lat: 0, lng: 0 }
-          };
-
-          console.log(`✅ Successfully fetched data using ${currentModel}`);
-          setCountryData(enrichedData);
-          const alreadySaved = savedCountries.some(c => c.name === enrichedData.name);
-          setIsSaved(alreadySaved);
-          setLoading(false);
-          return; // Success! Exit the function
-          
-        } catch (parseError) {
-          console.warn(`Model ${currentModel} parse error:`, parseError);
-          lastError = parseError;
-          continue; // Try next model
-        }
-      } catch (err) {
-        console.warn(`Model ${currentModel} fetch error:`, err);
-        lastError = err;
-        continue; // Try next model
-      }
+    // Validate input to prevent prompt injection
+    const validation = validateCountryInput(countryName);
+    if (!validation.valid) {
+      setError(validation.error);
+      setLoading(false);
+      return;
     }
     
-    // If we get here, all models failed
-    const errorMessage = `Failed with all models. Last error: ${lastError?.message}`;
-    console.error(`❌ ${errorMessage}`);
-    setError(errorMessage);
-    setLoading(false);
+    // Get country code first (needed for flag)
+    const countryCode = await getCountryCode(validation.value);
+    console.log(`Searching for: ${validation.value}, Country Code: ${countryCode}`);
+    
+    try {
+      // Call backend API proxy instead of Groq directly
+      // Backend handles all retries, circuit breaking, and API key management
+      const parsed = await fetchDestinationFromAI(validation.value);
+
+      // Generate flag URL using flagsapi.com
+      const flagUrl = countryCode ? `https://flagsapi.com/${countryCode}/flat/64.png` : `https://flagsapi.com/UN/flat/64.png`;
+
+      // Validate and enrich data with HARDCODED images
+      const enrichedData = {
+        name: parsed.name || countryName,
+        region: parsed.region || 'Asia',
+        capital: parsed.capital || 'Unknown',
+        population: parsed.population || 'Unknown',
+        currency: parsed.currency || 'Unknown',
+        language: parsed.language || 'Unknown',
+        area: parsed.area || 'Unknown',
+        timezone: parsed.timezone || 'Unknown',
+        callingCode: parsed.callingCode || 'Unknown',
+        description: parsed.description || 'No description available',
+        aiSummary: parsed.aiSummary || 'No summary available',
+        culture: parsed.culture || 'No culture information available',
+        food: parsed.food || 'No food information available',
+        bestTimeToVisit: parsed.bestTimeToVisit || 'Year-round destination',
+        heroImage: getRandomImage(hardcodedHeroImages),
+        flagEmoji: flagUrl,
+        countryCode: countryCode,
+        attractions: (parsed.attractions || []).map((attr) => ({
+          title: attr.title || 'Attraction',
+          subtitle: attr.subtitle || 'Popular Site',
+          image: getRandomImage(hardcodedImages)
+        })).slice(0, 3),
+        aiTips: (parsed.aiTips || []).slice(0, 8),
+        recommendedCountries: (parsed.recommendedCountries || []).map((rc) => ({
+          name: rc.name || 'Country',
+          region: rc.region || 'Region',
+          image: getRandomImage(hardcodedImages)
+        })).slice(0, 8),
+        // Validate coordinates - ensure lat and lng are valid numbers
+        coordinates: {
+          lat: typeof parsed.coordinates?.lat === 'number' && !isNaN(parsed.coordinates.lat) ? parsed.coordinates.lat : 0,
+          lng: typeof parsed.coordinates?.lng === 'number' && !isNaN(parsed.coordinates.lng) ? parsed.coordinates.lng : 0
+        }
+      };
+
+      console.log(`✅ Successfully fetched data for ${validation.value}`);
+      setCountryData(enrichedData);
+      const alreadySaved = savedCountries.some(c => c.name === enrichedData.name);
+      setIsSaved(alreadySaved);
+      setLoading(false);
+      
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to fetch destination data. Please try again.';
+      console.error(`❌ Error:`, errorMessage);
+      setError(errorMessage);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -328,32 +260,67 @@ Return ONLY valid JSON (no markdown, no code blocks): {"name": "", "region": "",
     fetchCountryFromGroq(country);
   };
 
-  const toggleSaveCurrent = () => {
+  const toggleSaveCurrent = async () => {
+    if (!user) {
+      alert('Please sign in to save destinations');
+      return;
+    }
+
     if (isSaved) {
-      const updated = savedCountries.filter(c => c.name !== countryData.name);
-      setSavedCountries(updated);
-      localStorage.setItem('savedDestinations', JSON.stringify(updated));
-      setIsSaved(false);
+      // Delete from Firestore
+      const destinationToDelete = savedCountries.find(c => c.name === countryData.name);
+      if (destinationToDelete) {
+        try {
+          await deleteDestination(user.uid, destinationToDelete.id);
+          setSavedCountries(prev => prev.filter(c => c.name !== countryData.name));
+          setIsSaved(false);
+        } catch (error) {
+          alert('Error deleting destination: ' + error.message);
+        }
+      }
     } else {
-      const newSaved = {
+      // Save to Firestore
+      const newDestination = {
         name: countryData.name,
         region: countryData.region,
+        capital: countryData.capital,
+        description: countryData.description,
+        aiSummary: countryData.aiSummary,
+        culture: countryData.culture,
+        food: countryData.food,
+        bestTimeToVisit: countryData.bestTimeToVisit,
+        heroImage: countryData.heroImage,
+        countryCode: countryData.countryCode,
+        attractions: countryData.attractions,
+        aiTips: countryData.aiTips,
+        recommendedCountries: countryData.recommendedCountries,
+        coordinates: countryData.coordinates,
         savedDate: new Date().toLocaleDateString(),
-        image: countryData.heroImage
       };
-      const updated = [newSaved, ...savedCountries];
-      setSavedCountries(updated);
-      localStorage.setItem('savedDestinations', JSON.stringify(updated));
-      setIsSaved(true);
+      try {
+        const docId = await saveDestination(user.uid, newDestination);
+        setSavedCountries(prev => [{ id: docId, ...newDestination }, ...prev]);
+        setIsSaved(true);
+      } catch (error) {
+        alert('Error saving destination: ' + error.message);
+      }
     }
   };
 
-  const deleteFromSaved = (countryName) => {
-    const updated = savedCountries.filter(c => c.name !== countryName);
-    setSavedCountries(updated);
-    localStorage.setItem('savedDestinations', JSON.stringify(updated));
-    if (countryData.name === countryName) {
-      setIsSaved(false);
+  const deleteFromSaved = async (countryName) => {
+    if (!user) return;
+    
+    const destinationToDelete = savedCountries.find(c => c.name === countryName);
+    if (destinationToDelete) {
+      try {
+        await deleteDestination(user.uid, destinationToDelete.id);
+        setSavedCountries(prev => prev.filter(c => c.name !== countryName));
+        if (countryData.name === countryName) {
+          setIsSaved(false);
+        }
+      } catch (error) {
+        alert('Error deleting destination: ' + error.message);
+      }
     }
   };
 
@@ -569,9 +536,6 @@ Return ONLY valid JSON (no markdown, no code blocks): {"name": "", "region": "",
                     <p className="text-slate-700 text-base leading-relaxed">
                       {countryData.description}
                     </p>
-                    <p className="text-slate-700 text-base leading-relaxed">
-                      The country's unique geography, consisting of four main islands—Honshu, Hokkaido, Kyushu, and Shikoku—contributes to its diverse landscapes and regional cultures. From the tropical beaches of Okinawa to the snowy mountains of Hokkaido, Japan offers varied experiences throughout its territories. Its efficient transportation network makes it easy to explore different regions, making it ideal for both short visits and extended stays.
-                    </p>
                   </div>
                 </div>
 
@@ -734,7 +698,7 @@ Return ONLY valid JSON (no markdown, no code blocks): {"name": "", "region": "",
                         onClick={() => handlePillClick(saved.name)} 
                         className="flex items-center space-x-2 p-2 rounded-xl bg-white/80 border border-indigo-200 hover:bg-white hover:shadow-md transition-all cursor-pointer h-full"
                       >
-                        <img src={saved.image} alt={saved.name} className="w-12 h-12 rounded-lg object-cover" />
+                        <img src={saved.heroImage} alt={saved.name} className="w-12 h-12 rounded-lg object-cover" />
                         <div className="flex-grow min-w-0">
                           <h4 className="font-bold text-slate-900 text-xs">{saved.name}</h4>
                           <div className="text-[10px] text-slate-500">Saved {saved.savedDate}</div>

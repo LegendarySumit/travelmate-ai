@@ -1,155 +1,187 @@
-// API Service Layer
-// Centralized functions for making API calls
+/**
+ * API Service Layer
+ * Frontend calls backend proxy endpoints instead of external APIs directly
+ * This ensures all sensitive API keys remain on backend
+ */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 /**
- * REST Countries API
- * https://restcountries.com/
+ * Fetch destination information from Groq AI via backend
+ * @param {string} countryName - Name of the country to fetch info for
+ * @returns {Promise<Object>} Country data with AI summaries
  */
-export const searchCountry = async (countryName) => {
+export const fetchDestinationFromAI = async (countryName) => {
   try {
-    const response = await fetch(
-      `https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}`
-    );
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Country not found. Please check the spelling and try again.');
-      }
-      throw new Error('Failed to fetch country data. Please try again later.');
-    }
-
-    const data = await response.json();
-    return data[0]; // Return the first match
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Network error. Please check your internet connection.');
-    }
-    throw error;
-  }
-};
-
-/**
- * OpenWeather API
- * Note: Requires API key - should be called through backend proxy
- */
-export const getWeather = async (city) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/weather/${encodeURIComponent(city)}`);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('City not found. Please check the spelling and try again.');
-      }
-      throw new Error('Failed to fetch weather data. Please try again later.');
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to weather service. Backend may not be running.');
-    }
-    throw error;
-  }
-};
-
-/**
- * Exchange Rate API
- * https://exchangerate-api.com/ (or similar)
- */
-export const getExchangeRate = async (fromCurrency, toCurrency) => {
-  try {
-    const response = await fetch(
-      `https://api.exchangerate-api.com/v4/latest/${fromCurrency}`
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch exchange rates. Please try again later.');
-    }
-
-    const data = await response.json();
-    return {
-      rate: data.rates[toCurrency],
-      date: data.date,
-      base: data.base,
-    };
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Network error. Please check your internet connection.');
-    }
-    throw error;
-  }
-};
-
-/**
- * AI Services - Groq API (through backend proxy)
- */
-export const getDestinationSummary = async (countryName, countryData) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/ai/destination-summary`, {
+    const response = await fetch(`${API_BASE_URL}/api/ai/destination`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ countryName, countryData }),
+      body: JSON.stringify({ countryName }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate AI summary. Please try again.');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch destination data');
     }
 
-    return await response.json();
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to AI service. Backend may not be running.');
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'AI request failed');
     }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching destination from AI:', error);
     throw error;
   }
 };
 
-export const getWeatherAdvice = async (weatherData, city) => {
+/**
+ * Fetch weather information from OpenWeather API via backend
+ * @param {string} city - City name to fetch weather for
+ * @returns {Promise<Object>} Weather data
+ */
+export const fetchWeatherData = async (city) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ai/weather-advice`, {
+    const response = await fetch(`${API_BASE_URL}/api/weather`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ weatherData, city }),
+      body: JSON.stringify({ city }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate weather advice. Please try again.');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch weather data');
     }
 
-    return await response.json();
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to AI service. Backend may not be running.');
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Weather request failed');
     }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching weather data:', error);
     throw error;
   }
 };
 
-export const getBudgetAdvice = async (budgetData) => {
+/**
+ * Fetch weather forecast from backend
+ * @param {string} city - City name to fetch forecast for
+ * @returns {Promise<Object>} Forecast data with 5-day predictions
+ */
+export const fetchWeatherForecast = async (city) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ai/budget-advice`, {
+    const response = await fetch(`${API_BASE_URL}/api/weather/forecast`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ budgetData }),
+      body: JSON.stringify({ city }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate budget advice. Please try again.');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch forecast data');
     }
 
-    return await response.json();
-  } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to AI service. Backend may not be running.');
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Forecast request failed');
     }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching forecast:', error);
     throw error;
+  }
+};
+
+/**
+ * Fetch exchange rates via backend
+ * @param {string} fromCurrency - Source currency code (e.g., 'USD')
+ * @param {string} toCurrency - Target currency code (e.g., 'EUR')
+ * @returns {Promise<Object>} Exchange rate data
+ */
+export const fetchExchangeRate = async (fromCurrency, toCurrency) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/exchange-rate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fromCurrency, toCurrency }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch exchange rates');
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Exchange rate request failed');
+    }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch country-specific budget estimates from AI via backend
+ * @param {string} destination - Destination country name
+ * @param {string} currency - Currency code (e.g., 'INR', 'USD')
+ * @returns {Promise<Object>} Budget estimates with accommodation, food, transport, activities, other
+ */
+export const fetchBudgetEstimates = async (destination, currency) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/budget/estimates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ destination, currency }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch budget estimates');
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Budget estimates request failed');
+    }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching budget estimates:', error);
+    throw error;
+  }
+};
+
+/**
+ * Health check - verify backend is running
+ * @returns {Promise<boolean>} True if backend is healthy
+ */
+export const healthCheck = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    return response.ok;
+  } catch {
+    return false;
   }
 };

@@ -1,243 +1,23 @@
+// By Sandipta Mishra
+
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Cloud, Sun, CloudRain, Droplets, Wind, Compass, 
   Sunrise, Sunset, Eye, Gauge, Umbrella, MapPin, Sparkles, 
   ArrowRight, Thermometer, ShieldCheck, Calendar, Clock, ChevronRight
 } from 'lucide-react';
+import { fetchWeatherData, fetchWeatherForecast } from '../services/api';
+import { validateCountryInput } from '../utils/validation';
 
 const POPULAR_CITIES = ['Tokyo', 'London', 'New York', 'Paris', 'Singapore', 'Dubai'];
 
-const CITY_DATABASE = {
-  tokyo: {
-    name: 'Tokyo',
-    country: 'Japan',
-    lat: 35.6762,
-    lon: 139.6503,
-    temp: 18,
-    feelsLike: 17,
-    condition: 'Partly cloudy',
-    icon: 'cloud-sun',
-    humidity: 62,
-    wind: 14,
-    pressure: 1018,
-    uvIndex: 4,
-    uvStatus: 'Moderate',
-    sunrise: '5:46 AM',
-    sunset: '5:12 PM',
-    visibility: '10 km',
-    precipitation: '0.2 mm',
-    aqi: 42,
-    aqiStatus: 'Good',
-    chanceOfRain: '30%',
-    localTime: 'Monday, 14 Oct 2025 • 10:24 AM',
-    heroImage: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Pack light jackets or layers for cool mornings and evenings.',
-      'Carry an umbrella or raincoat (chance of rain mid-week).',
-      'Wear comfortable walking shoes.',
-      'Sunglasses and sunscreen are recommended (moderate UV).',
-      'Consider breathable clothing for daytime temperatures.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 18, tempMin: 12, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Tue', date: '15 Oct', tempMax: 20, tempMin: 13, condition: 'Sunny', icon: 'sun' },
-      { day: 'Wed', date: '16 Oct', tempMax: 19, tempMin: 14, condition: 'Light rain', icon: 'cloud-rain' },
-      { day: 'Thu', date: '17 Oct', tempMax: 21, tempMin: 15, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Fri', date: '18 Oct', tempMax: 22, tempMin: 14, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sat', date: '19 Oct', tempMax: 20, tempMin: 13, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 18, tempMin: 12, condition: 'Showers', icon: 'cloud-rain' }
-    ]
-  },
-  london: {
-    name: 'London',
-    country: 'UK',
-    lat: 51.5074,
-    lon: -0.1278,
-    temp: 16,
-    feelsLike: 15,
-    condition: 'Cloudy',
-    icon: 'cloud',
-    humidity: 75,
-    wind: 18,
-    pressure: 1012,
-    uvIndex: 2,
-    uvStatus: 'Low',
-    sunrise: '6:15 AM',
-    sunset: '6:02 PM',
-    visibility: '8 km',
-    precipitation: '1.2 mm',
-    aqi: 55,
-    aqiStatus: 'Moderate',
-    chanceOfRain: '60%',
-    localTime: 'Monday, 14 Oct 2025 • 9:24 AM',
-    heroImage: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Waterproof jacket or sturdy umbrella is essential.',
-      'Layered sweaters for chilly Thames breeze.',
-      'Comfortable boots for cobblestone streets.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 16, tempMin: 10, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Tue', date: '15 Oct', tempMax: 15, tempMin: 9, condition: 'Light rain', icon: 'cloud-rain' },
-      { day: 'Wed', date: '16 Oct', tempMax: 17, tempMin: 11, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Thu', date: '17 Oct', tempMax: 14, tempMin: 8, condition: 'Rain', icon: 'cloud-rain' },
-      { day: 'Fri', date: '18 Oct', tempMax: 16, tempMin: 10, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Sat', date: '19 Oct', tempMax: 18, tempMin: 11, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 15, tempMin: 9, condition: 'Showers', icon: 'cloud-rain' }
-    ]
-  },
-  'new york': {
-    name: 'New York',
-    country: 'USA',
-    lat: 40.7128,
-    lon: -74.0060,
-    temp: 22,
-    feelsLike: 22,
-    condition: 'Sunny',
-    icon: 'sun',
-    humidity: 50,
-    wind: 12,
-    pressure: 1020,
-    uvIndex: 6,
-    uvStatus: 'High',
-    sunrise: '7:05 AM',
-    sunset: '6:20 PM',
-    visibility: '10 km',
-    precipitation: '0.0 mm',
-    aqi: 35,
-    aqiStatus: 'Good',
-    chanceOfRain: '10%',
-    localTime: 'Monday, 14 Oct 2025 • 4:24 AM',
-    heroImage: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Light t-shirts and breathable pants for daytime.',
-      'Light jacket for cooler evening rooftop strolls.',
-      'Sunglasses and comfortable walking sneakers.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 22, tempMin: 15, condition: 'Sunny', icon: 'sun' },
-      { day: 'Tue', date: '15 Oct', tempMax: 24, tempMin: 16, condition: 'Sunny', icon: 'sun' },
-      { day: 'Wed', date: '16 Oct', tempMax: 21, tempMin: 14, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Thu', date: '17 Oct', tempMax: 19, tempMin: 12, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Fri', date: '18 Oct', tempMax: 23, tempMin: 15, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sat', date: '19 Oct', tempMax: 25, tempMin: 17, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 20, tempMin: 13, condition: 'Light rain', icon: 'cloud-rain' }
-    ]
-  },
-  paris: {
-    name: 'Paris',
-    country: 'France',
-    lat: 48.8566,
-    lon: 2.3522,
-    temp: 18,
-    feelsLike: 17,
-    condition: 'Sunny',
-    icon: 'sun',
-    humidity: 58,
-    wind: 10,
-    pressure: 1016,
-    uvIndex: 4,
-    uvStatus: 'Moderate',
-    sunrise: '8:01 AM',
-    sunset: '7:05 PM',
-    visibility: '10 km',
-    precipitation: '0.1 mm',
-    aqi: 40,
-    aqiStatus: 'Good',
-    chanceOfRain: '20%',
-    localTime: 'Monday, 14 Oct 2025 • 10:24 AM',
-    heroImage: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Chic layers and a light trench coat.',
-      'Comfortable flats or loafers for walking along the Seine.',
-      'Scarf for breezy cafe evenings.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 18, tempMin: 11, condition: 'Sunny', icon: 'sun' },
-      { day: 'Tue', date: '15 Oct', tempMax: 19, tempMin: 12, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Wed', date: '16 Oct', tempMax: 17, tempMin: 10, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Thu', date: '17 Oct', tempMax: 16, tempMin: 9, condition: 'Light rain', icon: 'cloud-rain' },
-      { day: 'Fri', date: '18 Oct', tempMax: 20, tempMin: 12, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sat', date: '19 Oct', tempMax: 21, tempMin: 13, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 18, tempMin: 11, condition: 'Partly cloudy', icon: 'cloud-sun' }
-    ]
-  },
-  singapore: {
-    name: 'Singapore',
-    country: 'Singapore',
-    lat: 1.3521,
-    lon: 103.8198,
-    temp: 28,
-    feelsLike: 32,
-    condition: 'Light rain',
-    icon: 'cloud-rain',
-    humidity: 85,
-    wind: 8,
-    pressure: 1009,
-    uvIndex: 8,
-    uvStatus: 'Very High',
-    sunrise: '6:50 AM',
-    sunset: '6:55 PM',
-    visibility: '9 km',
-    precipitation: '4.5 mm',
-    aqi: 28,
-    aqiStatus: 'Good',
-    chanceOfRain: '80%',
-    localTime: 'Monday, 14 Oct 2025 • 4:24 PM',
-    heroImage: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Ultra-lightweight, breathable linen or cotton clothing.',
-      'Reliable folding umbrella or poncho for sudden tropical downpours.',
-      'High SPF sunscreen and sunglasses.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 28, tempMin: 24, condition: 'Light rain', icon: 'cloud-rain' },
-      { day: 'Tue', date: '15 Oct', tempMax: 29, tempMin: 24, condition: 'Showers', icon: 'cloud-rain' },
-      { day: 'Wed', date: '16 Oct', tempMax: 30, tempMin: 25, condition: 'Thunderstorm', icon: 'cloud-rain' },
-      { day: 'Thu', date: '17 Oct', tempMax: 29, tempMin: 24, condition: 'Cloudy', icon: 'cloud' },
-      { day: 'Fri', date: '18 Oct', tempMax: 28, tempMin: 24, condition: 'Showers', icon: 'cloud-rain' },
-      { day: 'Sat', date: '19 Oct', tempMax: 30, tempMin: 25, condition: 'Partly cloudy', icon: 'cloud-sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 29, tempMin: 24, condition: 'Light rain', icon: 'cloud-rain' }
-    ]
-  },
-  dubai: {
-    name: 'Dubai',
-    country: 'UAE',
-    lat: 25.2048,
-    lon: 55.2708,
-    temp: 32,
-    feelsLike: 35,
-    condition: 'Sunny',
-    icon: 'sun',
-    humidity: 45,
-    wind: 15,
-    pressure: 1010,
-    uvIndex: 9,
-    uvStatus: 'Very High',
-    sunrise: '6:10 AM',
-    sunset: '6:15 PM',
-    visibility: '10 km',
-    precipitation: '0.0 mm',
-    aqi: 65,
-    aqiStatus: 'Moderate',
-    chanceOfRain: '0%',
-    localTime: 'Monday, 14 Oct 2025 • 12:24 PM',
-    heroImage: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&q=80&w=1600',
-    packingTips: [
-      'Lightweight, modest linen clothing for daytime sun.',
-      'Heavy-duty sunglasses and wide-brim hat.',
-      'Light sweater for heavily air-conditioned indoor malls.'
-    ],
-    forecast: [
-      { day: 'Mon', date: '14 Oct', tempMax: 32, tempMin: 26, condition: 'Sunny', icon: 'sun' },
-      { day: 'Tue', date: '15 Oct', tempMax: 33, tempMin: 27, condition: 'Sunny', icon: 'sun' },
-      { day: 'Wed', date: '16 Oct', tempMax: 34, tempMin: 27, condition: 'Sunny', icon: 'sun' },
-      { day: 'Thu', date: '17 Oct', tempMax: 32, tempMin: 26, condition: 'Sunny', icon: 'sun' },
-      { day: 'Fri', date: '18 Oct', tempMax: 31, tempMin: 25, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sat', date: '19 Oct', tempMax: 32, tempMin: 26, condition: 'Sunny', icon: 'sun' },
-      { day: 'Sun', date: '20 Oct', tempMax: 33, tempMin: 27, condition: 'Sunny', icon: 'sun' }
-    ]
-  }
+const CITY_IMAGES = {
+  'Tokyo': 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&q=80&w=800',
+  'London': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&q=80&w=800',
+  'New York': 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&q=80&w=800',
+  'Paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=800',
+  'Singapore': 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&q=80&w=800',
+  'Dubai': 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&q=80&w=800'
 };
 
 export default function WeatherPlanner() {
@@ -246,63 +26,156 @@ export default function WeatherPlanner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [citiesWeather, setCitiesWeather] = useState({});
+  const [citiesLoading, setCitiesLoading] = useState(true);
   const mapRef = React.useRef(null);
 
-  const handleSearch = (cityName) => {
-    const key = cityName.toLowerCase().trim();
+  // Fetch weather for all popular cities on component mount
+  useEffect(() => {
+    const fetchAllCitiesWeather = async () => {
+      setCitiesLoading(true);
+      const weatherData = {};
+      
+      for (const city of POPULAR_CITIES) {
+        try {
+          const data = await fetchWeatherData(city);
+          weatherData[city] = {
+            temp: Math.round(data.main?.temp || 0),
+            condition: data.weather?.[0]?.main || 'Unknown',
+            icon: mapWeatherIcon(data.weather?.[0]?.main),
+            image: CITY_IMAGES[city]
+          };
+        } catch (err) {
+          console.warn(`Failed to fetch weather for ${city}:`, err.message);
+          weatherData[city] = {
+            temp: '—',
+            condition: 'Unavailable',
+            icon: 'cloud-sun',
+            image: CITY_IMAGES[city]
+          };
+        }
+      }
+      
+      setCitiesWeather(weatherData);
+      setCitiesLoading(false);
+    };
+
+    fetchAllCitiesWeather();
+  }, []);
+
+  const handleSearch = async (cityName) => {
     setLoading(true);
     setError(null);
     setHasSearched(true);
 
-    setTimeout(() => {
-      if (CITY_DATABASE[key]) {
-        setCurrentCity(CITY_DATABASE[key]);
-      } else {
-        // Generate dynamic mock for any searched city
-        const capitalized = cityName.charAt(0).toUpperCase() + cityName.slice(1);
-        const dynamicCity = {
-          name: capitalized,
-          country: 'International',
-          lat: 20.0 + Math.random() * 30,
-          lon: -40.0 + Math.random() * 80,
-          temp: Math.floor(Math.random() * 15) + 15,
-          feelsLike: Math.floor(Math.random() * 15) + 14,
-          condition: 'Partly cloudy',
-          icon: 'cloud-sun',
-          humidity: Math.floor(Math.random() * 40) + 40,
-          wind: Math.floor(Math.random() * 15) + 8,
-          pressure: 1015,
-          uvIndex: Math.floor(Math.random() * 6) + 3,
-          uvStatus: 'Moderate',
-          sunrise: '6:30 AM',
-          sunset: '6:45 PM',
-          visibility: '10 km',
-          precipitation: '0.5 mm',
-          aqi: Math.floor(Math.random() * 50) + 25,
-          aqiStatus: 'Good',
-          chanceOfRain: '25%',
-          localTime: `Monday, 14 Oct 2025 • 11:24 AM`,
-          heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&q=80&w=1600',
-          packingTips: [
-            `Pack versatile layers suitable for ${capitalized}'s climate.`,
-            'Bring comfortable walking shoes for city exploration.',
-            'Keep a light umbrella handy for unexpected weather shifts.',
-            'Sunglasses and daily SPF protection recommended.'
-          ],
-          forecast: [
-            { day: 'Mon', date: '14 Oct', tempMax: 22, tempMin: 14, condition: 'Partly cloudy', icon: 'cloud-sun' },
-            { day: 'Tue', date: '15 Oct', tempMax: 23, tempMin: 15, condition: 'Sunny', icon: 'sun' },
-            { day: 'Wed', date: '16 Oct', tempMax: 20, tempMin: 13, condition: 'Light rain', icon: 'cloud-rain' },
-            { day: 'Thu', date: '17 Oct', tempMax: 19, tempMin: 12, condition: 'Cloudy', icon: 'cloud' },
-            { day: 'Fri', date: '18 Oct', tempMax: 24, tempMin: 16, condition: 'Sunny', icon: 'sun' },
-            { day: 'Sat', date: '19 Oct', tempMax: 22, tempMin: 14, condition: 'Partly cloudy', icon: 'cloud-sun' },
-            { day: 'Sun', date: '20 Oct', tempMax: 21, tempMin: 13, condition: 'Sunny', icon: 'sun' }
-          ]
-        };
-        setCurrentCity(dynamicCity);
+    try {
+      // Validate input to prevent injection
+      const validation = validateCountryInput(cityName, 50);
+      if (!validation.valid) {
+        setError(validation.error);
+        setLoading(false);
+        return;
       }
+
+      // Fetch current weather AND forecast in parallel
+      const [weatherData, forecastData] = await Promise.all([
+        fetchWeatherData(validation.value),
+        fetchWeatherForecast(validation.value)
+      ]);
+
+      // Transform OpenWeather API response to our format
+      const enrichedWeather = {
+        name: weatherData.name || cityName,
+        country: weatherData.sys?.country || 'International',
+        lat: weatherData.coord?.lat || 0,
+        lon: weatherData.coord?.lon || 0,
+        temp: Math.round(weatherData.main?.temp || 0),
+        feelsLike: Math.round(weatherData.main?.feels_like || 0),
+        condition: weatherData.weather?.[0]?.main || 'Unknown',
+        icon: mapWeatherIcon(weatherData.weather?.[0]?.main),
+        humidity: weatherData.main?.humidity || 0,
+        wind: Math.round(weatherData.wind?.speed || 0),
+        pressure: weatherData.main?.pressure || 0,
+        uvIndex: 0, // OpenWeather free tier doesn't include UV index
+        uvStatus: 'N/A',
+        sunrise: new Date(weatherData.sys?.sunrise * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sunset: new Date(weatherData.sys?.sunset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        visibility: Math.round((weatherData.visibility || 0) / 1000) + ' km',
+        precipitation: (weatherData.rain?.['1h'] || 0).toFixed(1) + ' mm',
+        aqi: 0, // Would require separate API call
+        aqiStatus: 'N/A',
+        chanceOfRain: Math.round((weatherData.clouds?.all || 0)) + '%',
+        localTime: new Date().toLocaleString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&q=80&w=1600',
+        packingTips: generatePackingTips(weatherData.main?.temp, weatherData.weather?.[0]?.main),
+        // Transform forecast data
+        forecast: (forecastData.forecast || []).map((day) => ({
+          day: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
+          date: day.date,
+          tempMax: Math.round(day.tempMax),
+          tempMin: Math.round(day.tempMin),
+          condition: day.condition,
+          icon: mapWeatherIcon(day.condition),
+          humidity: day.humidity,
+          windSpeed: Math.round(day.windSpeed)
+        }))
+      };
+
+      setCurrentCity(enrichedWeather);
       setLoading(false);
-    }, 400);
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to fetch weather data. Please try again.';
+      console.error('❌ Error fetching weather:', errorMessage);
+      setError(errorMessage);
+      setLoading(false);
+    }
+  };
+
+  // Helper function to map OpenWeather icons to our icon names
+  const mapWeatherIcon = (weatherMain) => {
+    switch (weatherMain?.toLowerCase()) {
+      case 'clear':
+        return 'sun';
+      case 'clouds':
+        return 'cloud';
+      case 'rain':
+      case 'drizzle':
+      case 'thunderstorm':
+        return 'cloud-rain';
+      default:
+        return 'cloud-sun';
+    }
+  };
+
+  // Generate packing tips based on weather
+  const generatePackingTips = (temp, weatherCondition) => {
+    const tips = [];
+    const tempC = Math.round(temp || 0);
+
+    if (tempC < 10) {
+      tips.push('Pack warm winter coat and layers for cold weather');
+      tips.push('Insulated gloves and warm hat recommended');
+    } else if (tempC < 15) {
+      tips.push('Bring light jacket or cardigan for cool weather');
+      tips.push('Layered clothing will help you adjust to temperature changes');
+    } else if (tempC > 25) {
+      tips.push('Pack light, breathable clothing for hot weather');
+      tips.push('High SPF sunscreen and sunglasses are essential');
+    } else {
+      tips.push('Pack comfortable layers for mild weather');
+      tips.push('Light jacket for cooler evenings');
+    }
+
+    if (weatherCondition?.toLowerCase().includes('rain')) {
+      tips.push('Waterproof jacket or compact umbrella required');
+      tips.push('Waterproof bag for electronics');
+    }
+
+    if (weatherCondition?.toLowerCase() === 'clear') {
+      tips.push('Perfect weather! Bring camera and enjoy outdoor activities');
+    }
+
+    return tips.slice(0, 5);
   };
 
   const onSubmitSearch = (e) => {
@@ -863,40 +736,47 @@ export default function WeatherPlanner() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-                {Object.values(CITY_DATABASE).map((city, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => handleSearch(city.name)}
-                    className="group relative rounded-3xl overflow-hidden shadow-md border border-slate-200 cursor-pointer h-64 flex flex-col justify-between p-5 transition transform hover:-translate-y-1"
-                  >
-                    <div className="absolute inset-0 z-0">
-                      <img 
-                        src={city.heroImage} 
-                        alt={city.name} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/50 to-transparent"></div>
-                    </div>
-
-                    <div className="relative z-10 flex justify-between items-start">
-                      <div>
-                        <h3 className="text-base font-bold text-white">{city.name}</h3>
-                        <p className="text-xs text-slate-300">{city.country}</p>
+                {POPULAR_CITIES.map((city, idx) => {
+                  const cityWeather = citiesWeather[city];
+                  return (
+                    <div 
+                      key={idx}
+                      onClick={() => handleSearch(city)}
+                      className="group relative rounded-3xl overflow-hidden shadow-md border border-slate-200 cursor-pointer h-64 flex flex-col justify-between p-5 transition transform hover:-translate-y-1"
+                    >
+                      <div className="absolute inset-0 z-0">
+                        <img 
+                          src={cityWeather?.image || CITY_IMAGES[city]} 
+                          alt={city} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/50 to-transparent"></div>
                       </div>
-                      {renderWeatherIcon(city.icon, "w-6 h-6")}
-                    </div>
 
-                    <div className="relative z-10 flex items-end justify-between">
-                      <div>
-                        <span className="text-2xl font-black text-white">{city.temp}°C</span>
-                        <p className="text-xs text-slate-300 mt-0.5">{city.condition}</p>
+                      <div className="relative z-10 flex justify-between items-start">
+                        <div>
+                          <h3 className="text-base font-bold text-white">{city}</h3>
+                          <p className="text-xs text-slate-300">
+                            {citiesLoading ? 'Loading...' : cityWeather?.condition || 'View weather'}
+                          </p>
+                        </div>
+                        {cityWeather ? renderWeatherIcon(cityWeather.icon, 'w-6 h-6 text-amber-400') : <Cloud className="w-6 h-6 text-amber-400" />}
                       </div>
-                      <span className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-blue-600 transition">
-                        <ArrowRight className="w-4 h-4" />
-                      </span>
+
+                      <div className="relative z-10 flex items-end justify-between">
+                        <div>
+                          <span className="text-2xl font-black text-white">
+                            {citiesLoading ? '—' : `${cityWeather?.temp}°C`}
+                          </span>
+                          <p className="text-xs text-slate-300 mt-0.5">{citiesLoading ? 'Loading...' : 'Click to expand'}</p>
+                        </div>
+                        <span className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-blue-600 transition">
+                          <ArrowRight className="w-4 h-4" />
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </>

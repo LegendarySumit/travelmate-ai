@@ -1,3 +1,5 @@
+// By Sasanka Sekhar Malla
+
 import React, { useState, useEffect } from 'react';
 import { 
   Compass, Search, ArrowRight, Sparkles, RefreshCw, Calculator, 
@@ -5,45 +7,17 @@ import {
   ArrowLeftRight, Check, ShieldCheck, Play, Save, RotateCcw, X,
   Hotel, UtensilsCrossed, Car, Camera, MoreHorizontal, ChevronDown
 } from 'lucide-react';
-
-// Comprehensive currency to country code mapping
-const currencyList = {
-  "USD": { code: "US", symbol: "$", name: "US Dollar" },
-  "EUR": { code: "EU", symbol: "€", name: "Euro" },
-  "GBP": { code: "GB", symbol: "£", name: "British Pound" },
-  "INR": { code: "IN", symbol: "₹", name: "Indian Rupee" },
-  "AUD": { code: "AU", symbol: "A$", name: "Australian Dollar" },
-  "CAD": { code: "CA", symbol: "C$", name: "Canadian Dollar" },
-  "SGD": { code: "SG", symbol: "S$", name: "Singapore Dollar" },
-  "CHF": { code: "CH", symbol: "CHF", name: "Swiss Franc" },
-  "JPY": { code: "JP", symbol: "¥", name: "Japanese Yen" },
-  "CNY": { code: "CN", symbol: "¥", name: "Chinese Yuan" },
-  "NZD": { code: "NZ", symbol: "NZ$", name: "New Zealand Dollar" },
-  "HKD": { code: "HK", symbol: "HK$", name: "Hong Kong Dollar" },
-  "KRW": { code: "KR", symbol: "₩", name: "South Korean Won" },
-  "BRL": { code: "BR", symbol: "R$", name: "Brazilian Real" },
-  "MXN": { code: "MX", symbol: "Mex$", name: "Mexican Peso" },
-  "THB": { code: "TH", symbol: "฿", name: "Thai Baht" },
-  "IDR": { code: "ID", symbol: "Rp", name: "Indonesian Rupiah" },
-  "SEK": { code: "SE", symbol: "kr", name: "Swedish Krona" },
-  "NOK": { code: "NO", symbol: "kr", name: "Norwegian Krone" },
-  "DKK": { code: "DK", symbol: "kr", name: "Danish Krone" },
-  "AED": { code: "AE", symbol: "د.إ", name: "UAE Dirham" },
-  "SAR": { code: "SA", symbol: "﷼", name: "Saudi Riyal" },
-  "ZAR": { code: "ZA", symbol: "R", name: "South African Rand" },
-  "ARS": { code: "AR", symbol: "$", name: "Argentine Peso" },
-  "CLP": { code: "CL", symbol: "$", name: "Chilean Peso" },
-  "COP": { code: "CO", symbol: "$", name: "Colombian Peso" },
-  "PKR": { code: "PK", symbol: "₨", name: "Pakistani Rupee" },
-  "BDT": { code: "BD", symbol: "৳", name: "Bangladeshi Taka" },
-  "NGN": { code: "NG", symbol: "₦", name: "Nigerian Naira" },
-  "EGP": { code: "EG", symbol: "£", name: "Egyptian Pound" },
-  "ILS": { code: "IL", symbol: "₪", name: "Israeli Shekel" },
-  "TRY": { code: "TR", symbol: "₺", name: "Turkish Lira" },
-  "PLN": { code: "PL", symbol: "zł", name: "Polish Zloty" },
-  "CZK": { code: "CZ", symbol: "Kč", name: "Czech Koruna" },
-  "HUF": { code: "HU", symbol: "Ft", name: "Hungarian Forint" },
-};
+import { onAuthStateChange, getCurrentUser } from '../services/auth';
+import { 
+  saveBudget, 
+  getUserBudgets, 
+  updateBudget, 
+  deleteBudget 
+} from '../services/firestore';
+import { fetchExchangeRate, fetchBudgetEstimates } from '../services/api';
+import { CURRENCY_LIST } from '../config/currencies';
+import { POPULAR_DESTINATIONS, getCurrencyForDestination, getAllDestinations } from '../config/destinations';
+import { validateNumber, validateCurrencyCode } from '../utils/validation';
 
 const INITIAL_EXPENSES = {
   accommodation: { perDay: 80, total: 560 },
@@ -53,41 +27,90 @@ const INITIAL_EXPENSES = {
   other: { perDay: 15, total: 105 },
 };
 
-const POPULAR_DESTINATIONS = [
-  { name: 'Japan', cost: '₹6,000 – ₹10,000', image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&q=80&w=800' },
-  { name: 'France', cost: '€100 – €180', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=800' },
-  { name: 'Italy', cost: '€70 – €150', image: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&q=80&w=800' },
-  { name: 'Thailand', cost: '฿1,500 – ฿3,000', image: 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?auto=format&fit=crop&q=80&w=800' },
-  { name: 'USA', cost: '$150 – $250', image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&q=80&w=800' },
-  { name: 'Singapore', cost: 'S$120 – S$200', image: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&q=80&w=800' }
-];
-
 export default function BudgetPlanner() {
   const [destination, setDestination] = useState('Italy');
   const [currency, setCurrency] = useState('EUR');
   const [duration, setDuration] = useState(7);
   const [expenses, setExpenses] = useState(INITIAL_EXPENSES);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   
-  // Load saved budgets from localStorage
-  const [savedBudgets, setSavedBudgets] = useState(() => {
-    try {
-      const saved = localStorage.getItem('savedBudgets');
-      return saved ? JSON.parse(saved) : [];
-    } catch (error) {
-      console.error('Error loading saved budgets:', error);
-      return [];
-    }
-  });
+  // Load saved budgets from Firestore
+  const [savedBudgets, setSavedBudgets] = useState([]);
+
+  // Fetch and set budget estimates from AI
+  const [budgetLoading, setBudgetLoading] = useState(false);
+  const [budgetError, setBudgetError] = useState(null);
+
+  // Auto-set currency when destination changes
+  const handleDestinationChange = (newDestination) => {
+    setDestination(newDestination);
+    const newCurrency = getCurrencyForDestination(newDestination);
+    setCurrency(newCurrency);
+    // Fetch budget estimates for the new destination
+    fetchBudgetEstimatesForDestination(newDestination, newCurrency);
+  };
 
   const [converterFromCurrency, setConverterFromCurrency] = useState('INR');
   const [converterToCurrency, setConverterToCurrency] = useState('EUR');
   const [converterFromAmount, setConverterFromAmount] = useState(10000);
-  const [converterRate, setConverterRate] = useState(0.01065); // Will be updated via API
+  const [converterRate, setConverterRate] = useState(0.01065);
   const [convertedAmount, setConvertedAmount] = useState((10000 * 0.01065).toFixed(2));
   const [exchangeRateTimestamp, setExchangeRateTimestamp] = useState('');
+  const [exchangeRateError, setExchangeRateError] = useState(null);
   const [editingBudgetId, setEditingBudgetId] = useState(null);
   const [showFromCurrencyDropdown, setShowFromCurrencyDropdown] = useState(false);
   const [showToCurrencyDropdown, setShowToCurrencyDropdown] = useState(false);
+
+  // Fetch budget estimates from AI for country-specific costs
+  const fetchBudgetEstimatesForDestination = async (dest, curr) => {
+    setBudgetLoading(true);
+    setBudgetError(null);
+    try {
+      const estimates = await fetchBudgetEstimates(dest, curr);
+      if (estimates && estimates.estimates) {
+        // Use "midrange" as default realistic estimate
+        const e = estimates.estimates;
+        const newExpenses = {
+          accommodation: { perDay: Math.round(e.accommodation.midrange), total: Math.round(e.accommodation.midrange * duration) },
+          food: { perDay: Math.round(e.food.midrange), total: Math.round(e.food.midrange * duration) },
+          transport: { perDay: Math.round(e.transport.midrange), total: Math.round(e.transport.midrange * duration) },
+          activities: { perDay: Math.round(e.activities.midrange), total: Math.round(e.activities.midrange * duration) },
+          other: { perDay: Math.round(e.other.midrange), total: Math.round(e.other.midrange * duration) },
+        };
+        setExpenses(newExpenses);
+      }
+    } catch (error) {
+      console.error('Error fetching budget estimates:', error);
+      setBudgetError('Could not fetch AI estimates, using defaults. You can adjust them manually.');
+    } finally {
+      setBudgetLoading(false);
+    }
+  };
+
+  // Load initial budget estimates when component mounts
+  useEffect(() => {
+    fetchBudgetEstimatesForDestination(destination, currency);
+  }, []);
+
+  // Monitor auth state and load budgets
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const budgets = await getUserBudgets(currentUser.uid);
+          setSavedBudgets(budgets);
+        } catch (error) {
+          console.error('Error loading budgets:', error);
+        }
+      } else {
+        setSavedBudgets([]);
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
 
   // Reverse currency conversion
   const handleReverseCurrency = () => {
@@ -95,32 +118,42 @@ export default function BudgetPlanner() {
     setConverterToCurrency(converterFromCurrency);
   };
 
-  // Fetch real-time exchange rates from API
+  // Fetch real-time exchange rates from backend API
   useEffect(() => {
-    const fetchExchangeRate = async () => {
+    const fetchExchangeRateData = async () => {
       try {
-        const response = await fetch(`https://open.er-api.com/v6/latest/${converterFromCurrency}`);
-        const data = await response.json();
-        if (data.rates && data.rates[converterToCurrency]) {
-          const rate = data.rates[converterToCurrency];
-          setConverterRate(rate);
-          setConvertedAmount((converterFromAmount * rate).toFixed(2));
-          // Update timestamp
-          const now = new Date();
-          setExchangeRateTimestamp(now.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric', 
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }));
+        // Validate currency codes
+        const fromValidation = validateCurrencyCode(converterFromCurrency);
+        const toValidation = validateCurrencyCode(converterToCurrency);
+        
+        if (!fromValidation.valid || !toValidation.valid) {
+          setExchangeRateError('Invalid currency codes');
+          return;
         }
+
+        // Call backend API proxy (which calls open.er-api.com)
+        const rateData = await fetchExchangeRate(fromValidation.value, toValidation.value);
+        
+        setConverterRate(rateData.rate);
+        setConvertedAmount((converterFromAmount * rateData.rate).toFixed(2));
+        setExchangeRateError(null);
+        
+        // Update timestamp
+        const now = new Date();
+        setExchangeRateTimestamp(now.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }));
       } catch (error) {
         console.error('Error fetching exchange rate:', error);
+        setExchangeRateError('Failed to fetch exchange rates. Using last known rate.');
       }
     };
     
-    fetchExchangeRate();
+    fetchExchangeRateData();
   }, [converterFromCurrency, converterToCurrency]);
 
   // Update converted amount when input changes
@@ -170,54 +203,57 @@ export default function BudgetPlanner() {
     setDuration(7);
   };
 
-  const handleDeleteBudget = (id) => {
+  const handleDeleteBudget = async (id) => {
     if (confirm('Are you sure you want to delete this budget?')) {
-      setSavedBudgets(prev => {
-        const updated = prev.filter(b => b.id !== id);
-        try {
-          localStorage.setItem('savedBudgets', JSON.stringify(updated));
-        } catch (error) {
-          console.error('Error saving to localStorage:', error);
-        }
+      if (!user) {
+        alert('Please sign in to delete budgets');
+        return;
+      }
+      try {
+        await deleteBudget(user.uid, id);
+        setSavedBudgets(prev => prev.filter(b => b.id !== id));
         if (editingBudgetId === id) {
           setEditingBudgetId(null);
         }
-        return updated;
-      });
+        alert('Budget deleted successfully!');
+      } catch (error) {
+        alert('Error deleting budget: ' + error.message);
+      }
     }
   };
 
   // Save a new budget (or update existing)
-  const handleSaveBudget = () => {
+  const handleSaveBudget = async () => {
+    if (!user) {
+      alert('Please sign in to save budgets');
+      return;
+    }
+
     const budgetToSave = {
-      id: editingBudgetId || Date.now(),
       destination: destination,
       currency: currency,
       duration: duration,
       expenses: expenses,
-      flag: '🌍',
+      cost: `${CURRENCY_LIST[currency]?.symbol}${calculateTotalCost()}`,
       dates: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      cost: `${currencyList[currency]?.symbol}${calculateTotalCost()}`
     };
 
-    setSavedBudgets(prev => {
-      let updated;
+    try {
       if (editingBudgetId) {
         // Update existing budget
-        updated = prev.map(b => b.id === editingBudgetId ? budgetToSave : b);
+        await updateBudget(user.uid, editingBudgetId, budgetToSave);
+        setSavedBudgets(prev => prev.map(b => b.id === editingBudgetId ? { id: editingBudgetId, ...budgetToSave } : b));
+        alert('Budget updated successfully!');
         setEditingBudgetId(null);
       } else {
         // Add new budget
-        updated = [budgetToSave, ...prev];
+        const budgetId = await saveBudget(user.uid, budgetToSave);
+        setSavedBudgets(prev => [{ id: budgetId, ...budgetToSave }, ...prev]);
+        alert('Budget saved successfully!');
       }
-      try {
-        localStorage.setItem('savedBudgets', JSON.stringify(updated));
-        alert(editingBudgetId ? 'Budget updated successfully!' : 'Budget saved successfully!');
-      } catch (error) {
-        console.error('Error saving to localStorage:', error);
-      }
-      return updated;
-    });
+    } catch (error) {
+      alert('Error saving budget: ' + error.message);
+    }
   };
 
   // Load a saved budget into the calculator
@@ -278,13 +314,13 @@ export default function BudgetPlanner() {
           {/* Popular Destinations Pills */}
           <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs sm:text-sm">
             <span className="text-slate-400 font-medium">Popular destinations:</span>
-            {['Japan', 'France', 'Italy', 'Thailand', 'USA', 'Singapore'].map((dest) => (
+            {POPULAR_DESTINATIONS.slice(0, 12).map((dest) => (
               <button
-                key={dest}
-                onClick={() => setDestination(dest)}
+                key={dest.name}
+                onClick={() => handleDestinationChange(dest.name)}
                 className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded-full border border-slate-700 transition-all"
               >
-                {dest}
+                {dest.name}
               </button>
             ))}
           </div>
@@ -324,16 +360,14 @@ export default function BudgetPlanner() {
                   <span className="absolute left-3 top-3 text-sm">🌍</span>
                   <select 
                     value={destination} 
-                    onChange={(e) => setDestination(e.target.value)}
+                    onChange={(e) => handleDestinationChange(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 pl-9 pr-8 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="Italy">Italy</option>
-                    <option value="Japan">Japan</option>
-                    <option value="France">France</option>
-                    <option value="USA">USA</option>
-                    <option value="Australia">Australia</option>
-                    <option value="Thailand">Thailand</option>
-                    <option value="Singapore">Singapore</option>
+                    {getAllDestinations().map((dest) => (
+                      <option key={dest} value={dest}>
+                        {dest}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -345,9 +379,9 @@ export default function BudgetPlanner() {
                   onChange={(e) => setCurrency(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 px-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  {Object.keys(currencyList).map((code) => (
+                  {Object.keys(CURRENCY_LIST).map((code) => (
                     <option key={code} value={code}>
-                      {code} ({currencyList[code]?.symbol})
+                      {code} ({CURRENCY_LIST[code]?.symbol})
                     </option>
                   ))}
                 </select>
@@ -371,6 +405,21 @@ export default function BudgetPlanner() {
 
             {/* Expense breakdown table */}
             <div className="space-y-4">
+              {/* AI Budget Estimates Status */}
+              {budgetLoading && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full border-2 border-emerald-400 border-t-emerald-600 animate-spin"></div>
+                  <span className="text-sm font-medium text-emerald-700">Analyzing {destination} prices...</span>
+                </div>
+              )}
+              {budgetError && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-700">{budgetError}</span>
+                </div>
+              )}
+
+
               <div className="grid grid-cols-12 text-xs font-bold text-slate-400 uppercase border-b border-slate-100 pb-2">
                 <div className="col-span-6">Category</div>
                 <div className="col-span-3 text-right">Per day</div>
@@ -399,11 +448,11 @@ export default function BudgetPlanner() {
                         onChange={(e) => handleExpenseChange(item.key, e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 pr-8 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       />
-                      <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-slate-500 font-medium pointer-events-none">{currencyList[currency]?.symbol}</span>
+                      <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-slate-500 font-medium pointer-events-none">{CURRENCY_LIST[currency]?.symbol}</span>
                     </div>
                   </div>
                   <div className="col-span-3 text-right font-bold text-slate-900 text-sm">
-                    {currencyList[currency]?.symbol}{expenses[item.key].total}
+                    {CURRENCY_LIST[currency]?.symbol}{expenses[item.key].total}
                   </div>
                 </div>
               ))}
@@ -474,8 +523,8 @@ export default function BudgetPlanner() {
               <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 my-4 flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Total Estimated Cost</p>
-                  <h4 className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">{currencyList[currency]?.symbol}{totalCost.toLocaleString()}</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">({currencyList[currency]?.symbol}{perDayCost} per day for {duration} days)</p>
+                  <h4 className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">{CURRENCY_LIST[currency]?.symbol}{totalCost.toLocaleString()}</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">({CURRENCY_LIST[currency]?.symbol}{perDayCost} per day for {duration} days)</p>
                 </div>
                 <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 flex items-center justify-center text-emerald-700">
                   <DollarSign className="w-6 h-6" />
@@ -495,7 +544,7 @@ export default function BudgetPlanner() {
                     </svg>
                     <div className="absolute text-center">
                       <span className="text-xs font-bold text-slate-400 block">Total</span>
-                      <span className="text-sm font-black text-slate-800">{currencyList[currency]?.symbol}{totalCost}</span>
+                      <span className="text-sm font-black text-slate-800">{CURRENCY_LIST[currency]?.symbol}{totalCost}</span>
                     </div>
                   </div>
                 </div>
@@ -547,7 +596,7 @@ export default function BudgetPlanner() {
                   >
                     <div className="flex items-center gap-2">
                       <img 
-                        src={`https://flagsapi.com/${currencyList[converterFromCurrency]?.code}/flat/32.png`}
+                        src={`https://flagsapi.com/${CURRENCY_LIST[converterFromCurrency]?.code}/flat/32.png`}
                         alt={converterFromCurrency}
                         onError={(e) => e.target.style.display = 'none'}
                         className="w-5 h-5 rounded"
@@ -560,7 +609,7 @@ export default function BudgetPlanner() {
                   {/* From Currency Dropdown List */}
                   {showFromCurrencyDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 max-h-60 overflow-y-auto">
-                      {Object.keys(currencyList).map((curr) => (
+                      {Object.keys(CURRENCY_LIST).map((curr) => (
                         <button
                           key={curr}
                           onClick={() => {
@@ -570,14 +619,14 @@ export default function BudgetPlanner() {
                           className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 transition text-left"
                         >
                           <img 
-                            src={`https://flagsapi.com/${currencyList[curr]?.code}/flat/32.png`}
+                            src={`https://flagsapi.com/${CURRENCY_LIST[curr]?.code}/flat/32.png`}
                             alt={curr}
                             onError={(e) => e.target.style.display = 'none'}
                             className="w-5 h-5 rounded"
                           />
                           <div>
                             <span className="text-xs font-semibold text-slate-700">{curr}</span>
-                            <span className="text-[11px] text-slate-500 ml-1">{currencyList[curr]?.name}</span>
+                            <span className="text-[11px] text-slate-500 ml-1">{CURRENCY_LIST[curr]?.name}</span>
                           </div>
                         </button>
                       ))}
@@ -605,7 +654,7 @@ export default function BudgetPlanner() {
                   >
                     <div className="flex items-center gap-2">
                       <img 
-                        src={`https://flagsapi.com/${currencyList[converterToCurrency]?.code}/flat/32.png`}
+                        src={`https://flagsapi.com/${CURRENCY_LIST[converterToCurrency]?.code}/flat/32.png`}
                         alt={converterToCurrency}
                         onError={(e) => e.target.style.display = 'none'}
                         className="w-5 h-5 rounded"
@@ -618,7 +667,7 @@ export default function BudgetPlanner() {
                   {/* To Currency Dropdown List */}
                   {showToCurrencyDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 max-h-60 overflow-y-auto">
-                      {Object.keys(currencyList).map((curr) => (
+                      {Object.keys(CURRENCY_LIST).map((curr) => (
                         <button
                           key={curr}
                           onClick={() => {
@@ -628,14 +677,14 @@ export default function BudgetPlanner() {
                           className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 transition text-left"
                         >
                           <img 
-                            src={`https://flagsapi.com/${currencyList[curr]?.code}/flat/32.png`}
+                            src={`https://flagsapi.com/${CURRENCY_LIST[curr]?.code}/flat/32.png`}
                             alt={curr}
                             onError={(e) => e.target.style.display = 'none'}
                             className="w-5 h-5 rounded"
                           />
                           <div>
                             <span className="text-xs font-semibold text-slate-700">{curr}</span>
-                            <span className="text-[11px] text-slate-500 ml-1">{currencyList[curr]?.name}</span>
+                            <span className="text-[11px] text-slate-500 ml-1">{CURRENCY_LIST[curr]?.name}</span>
                           </div>
                         </button>
                       ))}
@@ -790,9 +839,8 @@ export default function BudgetPlanner() {
                   <span className="absolute bottom-2 left-3 text-white font-bold text-sm">{dest.name}</span>
                 </div>
                 <div className="p-3">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">Average daily</p>
-                  <p className="text-xs font-bold text-emerald-700 mt-0.5">{dest.cost}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">(per day)</p>
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">Click to plan</p>
+                  <p className="text-xs font-bold text-emerald-700 mt-0.5">Budget Calculator</p>
                 </div>
               </div>
             ))}
