@@ -96,6 +96,25 @@ const retryWithBackoff = async (
 //API ENDPOINTS
 
 /**
+ * Root endpoint - Welcome message
+ */
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'TravelMate AI Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      destination: 'POST /api/ai/destination',
+      weather: 'POST /api/weather',
+      weatherForecast: 'POST /api/weather/forecast',
+      exchangeRate: 'POST /api/exchange-rate',
+      budgetEstimates: 'POST /api/budget/estimates',
+    },
+  });
+});
+
+/**
  * Health check endpoint
  */
 app.get('/health', (req, res) => {
